@@ -1,0 +1,37 @@
+name: Publish signed Hamsahm 2.1.0
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'releases/Hamsahm.apk'
+      - 'releases/SHA256SUMS'
+      - '.github/workflows/publish-current.yml'
+permissions:
+  contents: write
+concurrency:
+  group: publish-hamsahm-2-1-0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pre-signed APK hash
+        run: sha256sum --check releases/SHA256SUMS
+      - name: Publish stable signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v2.1.0 >/dev/null 2>&1; then
+            count="$(gh release view v2.1.0 --json assets --jq '[.assets[] | select(.name == "Hamsahm.apk")] | length')"
+            if [ "$count" = "0" ]; then
+              gh release upload v2.1.0 releases/Hamsahm.apk
+            fi
+          else
+            gh release create v2.1.0 releases/Hamsahm.apk \
+              --target "$GITHUB_SHA" \
+              --title "هم‌سهم ۲.۱.۰ — اندروید ۷ به بالا" \
+              --notes-file releases/NOTES.md \
+              --latest
+          fi
