@@ -43,7 +43,7 @@ public final class MainActivity extends Activity {
     private static final String START = "https://" + HOST + "/assets/index.html";
     private static final int SAVE_DOCUMENT = 41, OPEN_DOCUMENT = 42;
     private static final int MAX_BYTES = 16 * 1024 * 1024;
-    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "backup-crypto.js", "native-controls.js", "reminders.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
+    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "backup-crypto.js", "native-controls.js", "reminders.js", "features.js", "features-ui.js", "funds.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
     private WebView web;
     private UpdateManager updates;
     private AppLock appLock;
@@ -152,6 +152,23 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void openPayment(String value) { runOnUiThread(()->{ if (localPage() && value != null && value.length()<2001) external(Uri.parse(value)); }); }
         @JavascriptInterface public void copyText(String value) { runOnUiThread(()->{ if (!localPage() || value == null || value.length()>4096) return; ((ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("هم‌سهم", value)); toast("لینک کپی شد."); }); }
+        @JavascriptInterface public void shareText(String value){runOnUiThread(()->{if(!localPage()||value==null||value.length()>8000)return;try{startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT,value),"اشتراک یادآوری"));}catch(Exception e){toast("اشتراک‌گذاری باز نشد.");}});}
+        @JavascriptInterface public void shareImage(String data){
+            if(data==null||data.length()>4*1024*1024||!data.startsWith("data:image/png;base64,"))return;
+            runOnUiThread(()->{if(!localPage())return;try{
+                byte[] bytes=android.util.Base64.decode(data.substring(22),android.util.Base64.DEFAULT);
+                android.graphics.BitmapFactory.Options options=new android.graphics.BitmapFactory.Options();options.inJustDecodeBounds=true;
+                android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length,options);
+                if(options.outWidth!=1080||options.outHeight!=1220||!"image/png".equals(options.outMimeType))throw new IllegalArgumentException();
+                java.io.File dir=new java.io.File(getCacheDir(),"shares");if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException();
+                java.io.File[] old=dir.listFiles();if(old!=null)for(java.io.File f:old)if(f.lastModified()<System.currentTimeMillis()-86400000L)f.delete();
+                java.io.File image=new java.io.File(dir,"account-"+java.util.UUID.randomUUID()+".png");
+                try(java.io.FileOutputStream out=new java.io.FileOutputStream(image)){out.write(bytes);}
+                Uri uri=Uri.parse("content://"+getPackageName()+".shares/"+image.getName());
+                Intent send=new Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                send.setClipData(ClipData.newRawUri("کارت حساب هم‌سهم",uri));startActivity(Intent.createChooser(send,"اشتراک کارت حساب"));
+            }catch(Exception e){toast("اشتراک تصویر انجام نشد.");}});
+        }
         @JavascriptInterface public void printPage() { runOnUiThread(()->{ if (localPage()) printWeb(); }); }
     }
     private void exportResult(boolean success) { if(web!=null) web.evaluateJavascript("window.hamsahmExportResult && window.hamsahmExportResult("+(success?"true":"false")+")",null); }

@@ -1,1 +1,10 @@
-{"name":"hamsahm","version":"2.2.1","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","check":"node --check app/src/main/assets/www/app.js && node --check app/src/main/assets/www/backup-crypto.js"}}
+{
+  "name": "hamsahm",
+  "version": "2.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check app/src/main/assets/www/app.js && node --check app/src/main/assets/www/core.js && node --check app/src/main/assets/www/features.js && node --check app/src/main/assets/www/features-ui.js && node --check app/src/main/assets/www/funds.js && node --check app/src/main/assets/www/backup-crypto.js"
+  }
+}

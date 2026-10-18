@@ -6,7 +6,7 @@ export function persian(date){if(!validDate(date))fail('تاریخ معتبر ن
 export const periodOf=date=>{const [y,m]=persian(date);return `${y}-${String(m).padStart(2,'0')}`};
 export function gregorian(y,m,d){if(!Number.isInteger(y)||y<1280||y>1578||!Number.isInteger(m)||m<1||m>12||!Number.isInteger(d)||d<1||d>31)fail('تاریخ شمسی معتبر نیست.');let lo=Math.floor(Date.UTC(y+621,0,1)/864e5),hi=Math.floor(Date.UTC(y+622,11,31)/864e5);const target=y*10000+m*100+d;while(lo<=hi){const mid=Math.floor((lo+hi)/2),iso=new Date(mid*864e5).toISOString().slice(0,10),p=persian(iso),key=p[0]*10000+p[1]*100+p[2];if(key===target)return iso;if(key<target)lo=mid+1;else hi=mid-1}fail('روز انتخاب‌شده در این ماه وجود ندارد.')}
 export const validPeriod=p=>{if(typeof p!=='string'||!/^\d{4}-\d{2}$/.test(p))return false;try{const [y,m]=p.split('-').map(Number);gregorian(y,m,1);return true}catch{return false}};
-export const empty=()=>({version:2,name:'صندوق خانوادگی',paymentUrl:'',members:[],dues:[],entries:[],draws:[]});
+export const empty=()=>({version:2,name:'صندوق خانوادگی',paymentUrl:'',members:[],dues:[],entries:[],draws:[],requests:[],constitution:''});
 export const active=s=>{const reversed=new Set(s.entries.filter(e=>e.type==='reversal').map(e=>e.targetId));return s.entries.filter(e=>e.type!=='reversal'&&!reversed.has(e.id))};
 const cash=entries=>entries.reduce((n,e)=>n+(['deposit','repayment'].includes(e.type)?e.amount:-e.amount),0);
 export const balance=s=>cash(active(s));
@@ -17,6 +17,9 @@ export function migrate(old){if(old?.version!==1)return old;return {...empty(),n
 export function validate(s){
  if(!s||s.version!==2||typeof s.name!=='string'||!s.name.trim()||s.name.length>100||!['members','dues','entries','draws'].every(k=>Array.isArray(s[k])))fail('ساختار پشتیبان معتبر نیست.');safePayment(s.paymentUrl);
  const members=new Map();for(const m of s.members){if(typeof m.id!=='string'||!m.id||members.has(m.id)||typeof m.name!=='string'||!m.name.trim()||m.name.length>100||!money(m.share)||typeof m.phone!=='string'||m.phone.length>30||typeof m.archived!=='boolean'||!validDate(m.joined))fail('اطلاعات عضو نامعتبر است.');members.set(m.id,m)}
+ if(s.constitution!==undefined&&(typeof s.constitution!=='string'||s.constitution.length>20000))fail('متن اساسنامه معتبر نیست.');
+ if(s.requests!==undefined&&!Array.isArray(s.requests))fail('درخواست‌های وام معتبر نیست.');
+ const requestIds=new Set();for(const r of s.requests||[]){if(typeof r.id!=='string'||!r.id||requestIds.has(r.id)||!members.has(r.memberId)||!money(r.amount)||!r.amount||!Number.isInteger(r.months)||r.months<1||r.months>120||r.months>r.amount||!validDate(r.date)||!validDate(r.targetDate)||r.targetDate<r.date||typeof r.reason!=='string'||!r.reason.trim()||r.reason.length>500||!['pending','approved','rejected'].includes(r.status)||typeof r.decision!=='string'||r.decision.length>500||(r.status!=='pending'&&(!r.decision.trim()||!validDate(r.decisionDate)||r.decisionDate<r.date)))fail('درخواست وام نامعتبر است.');requestIds.add(r.id)}
  const periods=new Set();for(const d of s.dues){const key=d.memberId+':'+d.period;if(!members.has(d.memberId)||!validPeriod(d.period)||!money(d.amount)||periods.has(key))fail('سهم ماهانه نامعتبر یا تکراری است.');periods.add(key)}
  const ids=new Map(),reversed=new Set();for(const e of s.entries){
  if(typeof e.id!=='string'||!e.id||ids.has(e.id)||!validDate(e.date)||!money(e.amount)||e.amount===0||typeof e.note!=='string'||e.note.length>500||typeof e.reference!=='string'||e.reference.length>100)fail('تراکنش نامعتبر است.');
@@ -30,6 +33,7 @@ export function validate(s){
  if(e.type==='repayment'){const loan=prior.find(l=>l.type==='loan'&&l.id===e.loanId);if(!loan||loan.memberId!==e.memberId||e.date<loan.date||e.amount>loan.amount-prior.filter(r=>r.type==='repayment'&&r.loanId===loan.id).reduce((n,r)=>n+r.amount,0))fail('وام یا مبلغ بازپرداخت معتبر نیست.')}
  prior.push(e);if(!Number.isSafeInteger(cash(prior)))fail('جمع مبالغ بیش از حد مجاز است.');
  }
+ const funded=new Set();for(const e of active(s).filter(e=>e.type==='loan'&&e.requestId)){const r=(s.requests||[]).find(r=>r.id===e.requestId);if(!r||r.status!=='approved'||funded.has(r.id)||r.memberId!==e.memberId||r.amount!==e.amount||r.months!==e.months||e.date<r.decisionDate)fail('ارتباط وام و درخواست معتبر نیست.');funded.add(r.id)}
  const drawIds=new Set();for(const d of s.draws){if(typeof d.id!=='string'||drawIds.has(d.id)||!members.has(d.winnerId)||!Array.isArray(d.candidates)||!d.candidates.length||new Set(d.candidates).size!==d.candidates.length||d.candidates.some(id=>!members.has(id))||!d.candidates.includes(d.winnerId)||!validDate(d.date))fail('سوابق قرعه‌کشی معتبر نیست.');drawIds.add(d.id)}
  return s;
 }
