@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "check": "node --check app/src/main/assets/www/app.js && node --check app/src/main/assets/www/core.js && node --check app/src/main/assets/www/features.js && node --check app/src/main/assets/www/features-ui.js && node --check app/src/main/assets/www/funds.js && node --check app/src/main/assets/www/backup-crypto.js && node --check app/src/main/assets/www/online.js && node --check app/src/main/assets/www/online-payload.js",
-    "bundle:online": "node scripts/bundle-online.mjs"
+    "bundle:online": "node scripts/bundle-online.mjs",
+    "build:pages": "node scripts/build-pages.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0"
