@@ -15,10 +15,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check
+      - run: npm test
       - run: |
           mkdir -p build/policy-tests
-          javac -encoding UTF-8 -d build/policy-tests app/src/main/java/ir/molido/hamsahm/UpdatePolicy.java tests/UpdatePolicyTest.java
+          javac -encoding UTF-8 -d build/policy-tests app/src/main/java/ir/molido/hamsahm/UpdatePolicy.java app/src/main/java/ir/molido/hamsahm/ReminderPolicy.java tests/UpdatePolicyTest.java tests/ReminderPolicyTest.java
           java -cp build/policy-tests ir.molido.hamsahm.UpdatePolicyTest
+          java -cp build/policy-tests ir.molido.hamsahm.ReminderPolicyTest
   debug:
     if: startsWith(github.ref, 'refs/tags/') == false
     needs: check

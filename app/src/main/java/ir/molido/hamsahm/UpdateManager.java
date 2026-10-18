@@ -42,7 +42,7 @@ public final class UpdateManager {
     private boolean alive(){return !activity.isFinishing()&&!activity.isDestroyed();}
     private void ui(Runnable r){activity.runOnUiThread(()->{if(alive())r.run();});}
     private void toast(String s){if(alive())Toast.makeText(activity,s,Toast.LENGTH_LONG).show();}
-    public String current(){try{return activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName;}catch(Exception e){return "2.1.0";}}
+    public String current(){try{return activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName;}catch(Exception e){return "2.2.0";}}
     public void check(boolean manual){
         if(!manual&&(!automatic()||System.currentTimeMillis()-prefs.getLong("last_check",0)<INTERVAL))return;
         if(!busy.compareAndSet(false,true)){if(manual)toast("بررسی یا دریافت نسخه در حال انجام است.");return;}

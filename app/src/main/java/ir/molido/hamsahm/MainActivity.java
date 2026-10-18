@@ -43,9 +43,10 @@ public final class MainActivity extends Activity {
     private static final String START = "https://" + HOST + "/assets/index.html";
     private static final int SAVE_DOCUMENT = 41, OPEN_DOCUMENT = 42;
     private static final int MAX_BYTES = 16 * 1024 * 1024;
-    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
+    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "backup-crypto.js", "native-controls.js", "reminders.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
     private WebView web;
     private UpdateManager updates;
+    private AppLock appLock;
     private byte[] pendingExport;
     private ValueCallback<Uri[]> chooser;
 
@@ -111,11 +112,13 @@ public final class MainActivity extends Activity {
             }
         });
         updates = new UpdateManager(this);
+        appLock = new AppLock(this,root,()->{if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('hamsahm-security-changed'))",null);});
+        ReminderManager.schedule(this);
         web.addJavascriptInterface(new Bridge(), "HamsahmNative");
         web.loadUrl(START);
     }
     private boolean trusted(Uri uri) { return uri != null && "https".equals(uri.getScheme()) && HOST.equals(uri.getHost()) && uri.getPort() == -1 && uri.getUserInfo() == null; }
-    private boolean localPage() { return web != null && trusted(Uri.parse(web.getUrl() == null ? "" : web.getUrl())); }
+    private boolean localPage() { return web != null && (appLock==null||appLock.allowsAccess()) && trusted(Uri.parse(web.getUrl() == null ? "" : web.getUrl())); }
     private WebResourceResponse blocked() { return new WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", new HashMap<>(), new ByteArrayInputStream(new byte[0])); }
     private void external(Uri uri) {
         if (uri == null || !"https".equals(uri.getScheme()) || uri.getUserInfo() != null || uri.getHost() == null) { toast("فقط لینک HTTPS معتبر مجاز است."); return; }
@@ -123,6 +126,13 @@ public final class MainActivity extends Activity {
     }
     private void toast(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
     public final class Bridge {
+        @JavascriptInterface public String securityInfo(){try{org.json.JSONObject out=new org.json.JSONObject();out.put("locked",appLock.enabled());out.put("reminders",ReminderManager.enabled(MainActivity.this));out.put("hour",ReminderManager.hour(MainActivity.this));out.put("notificationsAllowed",ReminderManager.permitted(MainActivity.this));return out.toString();}catch(Exception e){return "{}";}}
+        @JavascriptInterface public void setAppLock(boolean enabled){runOnUiThread(()->{if(localPage())appLock.change(enabled);});}
+        @JavascriptInterface public void lockNow(){runOnUiThread(()->{if(localPage())appLock.lock();});}
+        @JavascriptInterface public void configureReminders(boolean enabled,int hour){runOnUiThread(()->{if(localPage()){ReminderManager.configure(MainActivity.this,enabled,hour);web.evaluateJavascript("window.dispatchEvent(new Event('hamsahm-security-changed'))",null);}});}
+        @JavascriptInterface public void reminderSnapshot(String value){runOnUiThread(()->{if(localPage())ReminderManager.snapshot(MainActivity.this,value);});}
+        @JavascriptInterface public void testReminder(){runOnUiThread(()->{if(localPage())ReminderManager.test(MainActivity.this);});}
+
         @JavascriptInterface public void checkUpdates(){runOnUiThread(()->{if(localPage())updates.check(true);});}
         @JavascriptInterface public void setAutomaticUpdates(boolean enabled){runOnUiThread(()->{if(localPage())updates.setAutomatic(enabled);});}
         @JavascriptInterface public String updateInfo(){try{org.json.JSONObject data=new org.json.JSONObject();data.put("version",updates.current());data.put("automatic",updates.automatic());return data.toString();}catch(Exception e){return "{}";}}
@@ -131,7 +141,7 @@ public final class MainActivity extends Activity {
             final byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
             if (bytes.length > MAX_BYTES) { runOnUiThread(()->exportResult(false)); return; }
             runOnUiThread(()->{
-                if (!localPage()) return;
+                if (!localPage()) { exportResult(false); return; }
                 if (pendingExport != null) { toast("ابتدا پنجره ذخیره قبلی را ببندید."); exportResult(false); return; }
                 pendingExport = bytes;
                 String safeName = filename == null ? "Hamsahm-backup.json" : filename.replaceAll("[^A-Za-z0-9._-]", "_");
@@ -158,6 +168,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
+        if(request==AppLock.CREDENTIAL_REQUEST){appLock.credentialResult(result==RESULT_OK);return;}
         if(request==93){updates.permissionResult();return;}
         if (request == OPEN_DOCUMENT) { if (chooser!=null){chooser.onReceiveValue(result==RESULT_OK&&data!=null&&data.getData()!=null?new Uri[]{data.getData()}:null);chooser=null;}return; }
         if (request == SAVE_DOCUMENT) {
@@ -167,7 +178,10 @@ public final class MainActivity extends Activity {
             new Thread(()->{try(OutputStream out=getContentResolver().openOutputStream(uri,"wt")){if(out==null)throw new Exception();out.write(bytes);runOnUiThread(()->{toast("فایل ذخیره شد.");exportResult(true);});}catch(Exception e){runOnUiThread(()->{toast("ذخیره فایل ناموفق بود؛ دوباره پشتیبان بگیرید.");exportResult(false);});}}).start();
         }
     }
-    @Override protected void onResume(){super.onResume();if(web!=null)web.postDelayed(()->{if(updates!=null&&!isFinishing()&&!isDestroyed())updates.check(false);},2000);}
-    @Override public void onBackPressed(){web.evaluateJavascript("(function(){const d=document.querySelector('dialog[open]');if(d){d.close();return true}if(location.hash&&location.hash!=='#home'){location.hash='home';return true}return false})()",value->{if(!"true".equals(value))new AlertDialog.Builder(this).setMessage("از هم‌سهم خارج می‌شوید؟").setPositiveButton("خروج",(d,w)->finish()).setNegativeButton("ماندن",null).show();});}
-    @Override protected void onDestroy(){if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("HamsahmNative");web.destroy();web=null;}pendingExport=null;super.onDestroy();}
+    @Override protected void onResume(){super.onResume();if(appLock!=null)appLock.onResume();if(web!=null)web.postDelayed(()->{if(updates!=null&&!isFinishing()&&!isDestroyed()&&(appLock==null||appLock.allowsAccess()))updates.check(false);},2000);}
+    @Override protected void onStop(){if(appLock!=null)appLock.lock();super.onStop();}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==ReminderManager.REQUEST_NOTIFICATION){toast(ReminderManager.permitted(this)?"اجازه اعلان‌ها فعال شد.":"اعلان‌ها مجاز نیستند؛ یادآوری در تنظیمات اندروید قابل فعال‌سازی است.");if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('hamsahm-security-changed'))",null);}}
+
+    @Override public void onBackPressed(){if(appLock!=null&&!appLock.allowsAccess()){finish();return;}web.evaluateJavascript("(function(){const d=document.querySelector('dialog[open]');if(d){d.close();return true}if(location.hash&&location.hash!=='#home'){location.hash='home';return true}return false})()",value->{if(!"true".equals(value))new AlertDialog.Builder(this).setMessage("از هم‌سهم خارج می‌شوید؟").setPositiveButton("خروج",(d,w)->finish()).setNegativeButton("ماندن",null).show();});}
+    @Override protected void onDestroy(){if(appLock!=null)appLock.destroy();if(chooser!=null)chooser.onReceiveValue(null);if(web!=null){web.removeJavascriptInterface("HamsahmNative");web.destroy();web=null;}pendingExport=null;super.onDestroy();}
 }
