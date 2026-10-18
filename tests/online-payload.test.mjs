@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {empty,addEntry,cancelEntry,gregorian} from '../app/src/main/assets/www/core.js';import {publicationPayload} from '../app/src/main/assets/www/online-payload.js';
+const day=gregorian(1405,1,1),member={id:'m',name:'عضو',share:500,phone:'09123456789',joined:day,archived:false},membership={id:'cloud-m',local_member_id:'m',status:'approved'};
+const initial=()=>addEntry({...empty(),members:[member]},{id:'txn',type:'deposit',memberId:'m',date:day,period:'1405-01',amount:1000,note:'خصوصی',reference:'شماره خصوصی'});
+test('publication uses only approved accounts and omits private contacts and notes',()=>{const p=publicationPayload(initial(),[membership,{id:'pending',local_member_id:'m',status:'pending'}],day);assert.equal(p.accounts.length,1);assert.equal(p.payments.length,1);assert.equal(p.summary.balance,1000);assert.equal(p.payments[0].source_reference,'offline:txn');assert.ok(!JSON.stringify(p).includes(member.phone));assert.ok(!JSON.stringify(p).includes('خصوصی'))});
+test('cancellation removes gate payment from next publication',()=>{const s=cancelEntry(initial(),'txn','اصلاح','rev',day);const p=publicationPayload(s,[membership],day);assert.equal(p.payments.length,0);assert.equal(p.summary.balance,0)});
+test('unmatched approved member blocks publishing another ledger',()=>assert.throws(()=>publicationPayload(initial(),[{...membership,local_member_id:'missing'}],day)));
+test('future payments cannot unlock online access',()=>assert.throws(()=>publicationPayload(initial(),[membership],'2025-01-01')));
+
+test('suspended linked accounts retain references for reconciliation without losing payment history',()=>{const p=publicationPayload(initial(),[{...membership,status:'suspended'}],day);assert.equal(p.accounts.length,1);assert.equal(p.payments.length,1)});

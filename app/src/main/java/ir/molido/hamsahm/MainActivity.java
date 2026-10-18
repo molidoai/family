@@ -43,7 +43,7 @@ public final class MainActivity extends Activity {
     private static final String START = "https://" + HOST + "/assets/index.html";
     private static final int SAVE_DOCUMENT = 41, OPEN_DOCUMENT = 42;
     private static final int MAX_BYTES = 16 * 1024 * 1024;
-    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "backup-crypto.js", "native-controls.js", "reminders.js", "features.js", "features-ui.js", "funds.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
+    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "backup-crypto.js", "native-controls.js", "reminders.js", "features.js", "features-ui.js", "funds.js", "online.js", "online-payload.js", "online-config.js", "online-vendor.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
     private WebView web;
     private UpdateManager updates;
     private AppLock appLock;
@@ -75,6 +75,7 @@ public final class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
+                if (!request.isForMainFrame() && "https".equals(uri.getScheme()) && "repfhpczklxftloyffix.supabase.co".equals(uri.getHost()) && uri.getPort()==-1 && uri.getUserInfo()==null && uri.getPath()!=null && (uri.getPath().startsWith("/auth/v1/") || uri.getPath().startsWith("/rest/v1/"))) return null;
                 if (!trusted(uri) || !"GET".equals(request.getMethod())) return blocked();
                 String path = uri.getPath();
                 if (path == null || !path.startsWith("/assets/")) return blocked();
@@ -84,7 +85,7 @@ public final class MainActivity extends Activity {
                     String mime = name.endsWith(".js") ? "text/javascript" : name.endsWith(".css") ? "text/css" : name.endsWith(".svg") ? "image/svg+xml" : name.endsWith(".png") ? "image/png" : name.endsWith(".webmanifest") ? "application/manifest+json" : "text/html";
                     HashMap<String,String> headers = new HashMap<>();
                     headers.put("X-Content-Type-Options", "nosniff");
-                    headers.put("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
+                    headers.put("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://repfhpczklxftloyffix.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
                     return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, getAssets().open("www/" + name));
                 } catch (Exception e) { return blocked(); }
             }

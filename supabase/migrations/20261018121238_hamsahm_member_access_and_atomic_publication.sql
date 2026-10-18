@@ -10,6 +10,7 @@ create table public.hamsahm_funds (
  owner_id uuid not null references auth.users(id),
  name text not null check (length(btrim(name)) between 1 and 100),
  payment_url text not null default '' check (payment_url='' or (length(payment_url)<=2000 and payment_url ~ '^https://[^/@[:space:]]+([/?#]|$)')),
+ snapshot_revision bigint not null default 0,
  created_at timestamptz not null default now()
 );
 create table public.hamsahm_memberships (
@@ -69,6 +70,14 @@ create table public.hamsahm_access_audit (
  actor_id uuid not null references auth.users(id), event text not null,
  subject_id uuid, details jsonb not null default '{}', created_at timestamptz not null default now()
 );
+
+create index hamsahm_funds_owner on public.hamsahm_funds(owner_id);
+create index hamsahm_memberships_user on public.hamsahm_memberships(user_id);
+create index hamsahm_memberships_decider on public.hamsahm_memberships(decided_by);
+create index hamsahm_confirmations_member on public.hamsahm_confirmations(fund_id,membership_id);
+create index hamsahm_confirmations_actor on public.hamsahm_confirmations(confirmed_by);
+create index hamsahm_audit_fund on public.hamsahm_access_audit(fund_id);
+create index hamsahm_audit_actor on public.hamsahm_access_audit(actor_id);
 
 create function hamsahm_private.is_owner(fid uuid) returns boolean
 language sql stable security definer set search_path='' as $$
@@ -142,7 +151,7 @@ begin
  select * into m from public.hamsahm_memberships where id=mid for update;
  if not found or not hamsahm_private.is_owner(m.fund_id) then raise exception 'Owner required' using errcode='42501';end if;
  if m.status<>'approved' then raise exception 'Approved membership required';end if;
- if paid_on>current_date then raise exception 'Future payments cannot unlock access';end if;
+ if paid_on>(now() at time zone 'Asia/Tehran')::date then raise exception 'Future payments cannot unlock access';end if;
  insert into public.hamsahm_confirmations(fund_id,membership_id,source_reference,kind,amount,payment_date,confirmed_by) values(m.fund_id,mid,btrim(source_ref),payment_kind,payment_amount,paid_on,uid) returning id into cid;
  insert into public.hamsahm_access_audit(fund_id,actor_id,event,subject_id) values(m.fund_id,uid,'payment_confirmed',cid);return cid;
 end;$$;
@@ -163,4 +172,50 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function public.hamsahm_create_fund(text,text),public.hamsahm_request_membership(uuid,text),public.hamsahm_decide_membership(uuid,text,text,text),public.hamsahm_confirm_payment(uuid,text,text,bigint,date),public.hamsahm_revoke_payment(uuid,text),public.hamsahm_my_access(uuid) from public,anon,authenticated;
 grant execute on function public.hamsahm_create_fund(text,text),public.hamsahm_request_membership(uuid,text),public.hamsahm_decide_membership(uuid,text,text,text),public.hamsahm_confirm_payment(uuid,text,text,bigint,date),public.hamsahm_revoke_payment(uuid,text),public.hamsahm_my_access(uuid) to authenticated;
+
+-- A single owner-approved publication reconciles offline confirmations and summaries atomically.
+create function public.hamsahm_publish_snapshot(fid uuid,expected_revision bigint,fund_name text,payment_link text,summary jsonb,accounts jsonb,payments jsonb) returns bigint
+language plpgsql security definer set search_path='' as $$
+declare f public.hamsahm_funds; item jsonb;mid uuid;ref text;rev bigint;uid uuid:=auth.uid();
+begin
+ select * into f from public.hamsahm_funds where id=fid for update;
+ if not found or f.owner_id is distinct from uid then raise exception 'Owner required' using errcode='42501';end if;
+ if f.snapshot_revision<>expected_revision then raise exception 'Snapshot changed; refresh before publishing';end if;
+ if jsonb_typeof(summary) is distinct from 'object' or jsonb_typeof(accounts) is distinct from 'array' or jsonb_typeof(payments) is distinct from 'array' then raise exception 'Invalid snapshot';end if;
+ if jsonb_array_length(accounts)>5000 or jsonb_array_length(payments)>50000 then raise exception 'Snapshot too large';end if;
+ if jsonb_array_length(accounts)<>(select count(distinct value->>'membership_id') from jsonb_array_elements(accounts)) then raise exception 'Duplicate account';end if;
+ if jsonb_array_length(payments)<>(select count(distinct value->>'source_reference') from jsonb_array_elements(payments)) then raise exception 'Duplicate payment';end if;
+ -- Lock linked accounts so a decision cannot change their identity midway through publication.
+ perform 1 from public.hamsahm_memberships where fund_id=fid order by id for update;
+ for item in select value from jsonb_array_elements(accounts) loop
+  mid:=(item->>'membership_id')::uuid;
+  if not exists(select 1 from public.hamsahm_memberships where id=mid and fund_id=fid and status='approved') then raise exception 'Account must be approved in this fund';end if;
+  insert into public.hamsahm_account_summaries(fund_id,membership_id,total_deposits,share_debt,loan_debt,overdue,next_due,next_amount,as_of)
+   values(fid,mid,(item->>'total_deposits')::bigint,(item->>'share_debt')::bigint,(item->>'loan_debt')::bigint,(item->>'overdue')::bigint,(item->>'next_due')::date,(item->>'next_amount')::bigint,(summary->>'as_of')::date)
+   on conflict(fund_id,membership_id) do update set total_deposits=excluded.total_deposits,share_debt=excluded.share_debt,loan_debt=excluded.loan_debt,overdue=excluded.overdue,next_due=excluded.next_due,next_amount=excluded.next_amount,as_of=excluded.as_of;
+ end loop;
+ -- Missing account rows are no longer published; no stale private account is exposed.
+ delete from public.hamsahm_account_summaries a where a.fund_id=fid and not exists(select 1 from jsonb_array_elements(accounts) j where (j.value->>'membership_id')::uuid=a.membership_id);
+ for item in select value from jsonb_array_elements(payments) loop
+  mid:=(item->>'membership_id')::uuid;ref:=item->>'source_reference';
+  if ref is null or ref !~ '^offline:.+' or not exists(select 1 from jsonb_array_elements(accounts) a where (a.value->>'membership_id')::uuid=mid) then raise exception 'Invalid payment account or reference';end if;
+  if (item->>'payment_date')::date>(now() at time zone 'Asia/Tehran')::date then raise exception 'Future payments cannot unlock access';end if;
+  if exists(select 1 from public.hamsahm_confirmations c where c.fund_id=fid and c.source_reference=ref and (c.membership_id<>mid or c.kind<>item->>'kind' or c.amount<>(item->>'amount')::bigint or c.payment_date<>(item->>'payment_date')::date or c.revoked_at is not null)) then raise exception 'Payment changed or already revoked';end if;
+  insert into public.hamsahm_confirmations(fund_id,membership_id,source_reference,kind,amount,payment_date,confirmed_by)
+   values(fid,mid,ref,item->>'kind',(item->>'amount')::bigint,(item->>'payment_date')::date,uid) on conflict(fund_id,source_reference) do nothing;
+ end loop;
+ -- An offline cancellation must also close the online gate when it was the last valid payment.
+ update public.hamsahm_confirmations c set revoked_at=now(),revoke_reason='Offline publication: payment no longer active'
+  where c.fund_id=fid and c.revoked_at is null and c.source_reference like 'offline:%'
+  and not exists(select 1 from jsonb_array_elements(payments) j where j.value->>'source_reference'=c.source_reference);
+ insert into public.hamsahm_fund_summaries(fund_id,balance,total_deposits,total_repayments,total_loans,total_expenses,as_of)
+  values(fid,(summary->>'balance')::bigint,(summary->>'total_deposits')::bigint,(summary->>'total_repayments')::bigint,(summary->>'total_loans')::bigint,(summary->>'total_expenses')::bigint,(summary->>'as_of')::date)
+  on conflict(fund_id) do update set balance=excluded.balance,total_deposits=excluded.total_deposits,total_repayments=excluded.total_repayments,total_loans=excluded.total_loans,total_expenses=excluded.total_expenses,as_of=excluded.as_of;
+ update public.hamsahm_funds set name=btrim(fund_name),payment_url=payment_link,snapshot_revision=snapshot_revision+1 where id=fid returning snapshot_revision into rev;
+ insert into public.hamsahm_access_audit(fund_id,actor_id,event,details) values(fid,uid,'snapshot_published',jsonb_build_object('revision',rev,'accounts',jsonb_array_length(accounts),'payments',jsonb_array_length(payments)));
+ return rev;
+end;$$;
+revoke all on function public.hamsahm_publish_snapshot(uuid,bigint,text,text,jsonb,jsonb,jsonb) from public,anon,authenticated;
+grant execute on function public.hamsahm_publish_snapshot(uuid,bigint,text,text,jsonb,jsonb,jsonb) to authenticated;
+
 commit;

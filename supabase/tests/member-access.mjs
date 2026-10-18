@@ -1,12 +1,12 @@
 import {createRequire} from 'node:module';
 const {PGlite}=createRequire(import.meta.url)('@electric-sql/pglite');
-import {readFile} from 'node:fs/promises';
+import {readFile,readdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 const db=new PGlite();let checks=0;
 const owner='00000000-0000-4000-8000-000000000001',member='00000000-0000-4000-8000-000000000002',other='00000000-0000-4000-8000-000000000003',stranger='00000000-0000-4000-8000-000000000004';
 await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated;grant execute on function auth.uid() to authenticated;`);
 for(const id of [owner,member,other,stranger])await db.query('insert into auth.users(id) values($1)',[id]);
-await db.exec(await readFile(new URL('../migrations/202610180001_member_access.sql',import.meta.url),'utf8'));
+for(const file of (await readdir(new URL('../migrations/',import.meta.url))).filter(f=>f.endsWith('.sql')).sort())await db.exec(await readFile(new URL('../migrations/'+file,import.meta.url),'utf8'));
 async function as(uid,sql,params=[]){await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid||'']);await db.exec(uid?'set role authenticated':'set role anon');try{return await db.query(sql,params)}finally{await db.exec('reset role')}}
 async function equal(uid,sql,params,expected){const r=await as(uid,sql,params);assert.deepEqual(r.rows,expected);checks++;}
 async function denied(uid,sql,params=[]){await assert.rejects(()=>as(uid,sql,params));checks++;}
@@ -67,5 +67,25 @@ await denied(member,'delete from public.hamsahm_confirmations');
 await denied(owner,'delete from public.hamsahm_access_audit');
 await denied(owner,"update public.hamsahm_funds set owner_id=$1 where id=$2",[member,fund]);
 await equal(stranger,'select * from public.hamsahm_my_access($1)',[fund],[]);
+// Atomic offline publication: grants, optimistic version, cancellation and rollback.
+await as(owner,"select public.hamsahm_decide_membership($1,'approved','m2','تأیید دوم')",[mid2]);
+const summary={balance:1000,total_deposits:1500,total_repayments:0,total_loans:500,total_expenses:0,as_of:'2026-10-18'},accounts=[{membership_id:mid2,total_deposits:10,share_debt:0,loan_debt:0,overdue:0,next_due:null,next_amount:null}],payments=[{membership_id:mid2,source_reference:'offline:txn1',kind:'deposit',amount:10,payment_date:'2026-01-01'}];
+const publish='select public.hamsahm_publish_snapshot($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb) revision';
+const args=(revision,p=payments,s=summary,a=accounts)=>[fund,revision,'صندوق خانواده','https://example.org/pay',JSON.stringify(s),JSON.stringify(a),JSON.stringify(p)];
+await denied(member,publish,args(0));
+await equal(owner,publish,args(0),[{revision:1}]);
+await equal(other,'select unlocked from public.hamsahm_my_access($1)',[fund],[{unlocked:true}]);
+await denied(owner,publish,args(0));
+await as(owner,"select public.hamsahm_decide_membership($1,'suspended','m2','تعلیق موقت')",[mid2]);
+await equal(owner,publish,args(1),[{revision:2}]);
+await equal(other,'select unlocked from public.hamsahm_my_access($1)',[fund],[{unlocked:false}]);
+await as(owner,"select public.hamsahm_decide_membership($1,'approved','m2','رفع تعلیق')",[mid2]);
+await equal(other,'select unlocked from public.hamsahm_my_access($1)',[fund],[{unlocked:true}]);
+await equal(owner,publish,args(2,[]),[{revision:3}]);
+await equal(other,'select unlocked from public.hamsahm_my_access($1)',[fund],[{unlocked:false}]);
+await denied(owner,publish,args(3));
+await denied(owner,publish,args(3,[],{...summary,balance:999}));
+await equal(owner,'select snapshot_revision from public.hamsahm_funds where id=$1',[fund],[{snapshot_revision:3}]);
+await equal(owner,'select balance from public.hamsahm_fund_summaries where fund_id=$1',[fund],[{balance:1000}]);
 console.log(`${checks} PostgreSQL access checks passed: approval, first confirmation, tenant isolation, private accounts, spoofing prevention, suspension, revocation and audit.`);
 await db.close();

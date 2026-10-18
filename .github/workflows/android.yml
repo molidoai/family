@@ -18,6 +18,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci --ignore-scripts
+      - run: npm run bundle:online
+      - run: git diff --exit-code -- app/src/main/assets/www/online-vendor.js
       - run: npm run check
       - run: npm test
       - run: |

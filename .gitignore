@@ -11,3 +11,5 @@ password.txt
 .private/
 
 node_modules/
+
+supabase/.temp/
