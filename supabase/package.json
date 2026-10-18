@@ -1,0 +1,8 @@
+{
+  "name": "hamsahm-member-access-tests",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {"test": "node tests/member-access.mjs"},
+  "devDependencies": {"@electric-sql/pglite": "0.3.14"}
+}

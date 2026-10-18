@@ -9,3 +9,5 @@ local.properties
 password.txt
 
 .private/
+
+node_modules/
