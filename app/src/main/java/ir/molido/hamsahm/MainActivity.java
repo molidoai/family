@@ -43,7 +43,7 @@ public final class MainActivity extends Activity {
     private static final String START = "https://" + HOST + "/assets/index.html";
     private static final int SAVE_DOCUMENT = 41, OPEN_DOCUMENT = 42;
     private static final int MAX_BYTES = 16 * 1024 * 1024;
-    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "backup-crypto.js", "native-controls.js", "reminders.js", "features.js", "features-ui.js", "funds.js", "online.js", "online-payload.js", "online-config.js", "online-vendor.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
+    private final Set<String> files = new HashSet<>(Arrays.asList("index.html", "app.js", "core.js", "backup-crypto.js", "native-controls.js", "reminders.js", "features.js", "features-ui.js", "assistant.js", "funds.js", "online.js", "online-payload.js", "online-config.js", "online-vendor.js", "style.css", "icon.svg", "logo.svg", "icon-192.png", "icon-512.png", "manifest.webmanifest"));
     private WebView web;
     private UpdateManager updates;
     private AppLock appLock;
