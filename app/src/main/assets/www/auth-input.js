@@ -1,0 +1,3 @@
+export const latinDigits=value=>String(value).replace(/[۰-۹]/g,c=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(c)).replace(/[٠-٩]/g,c=>'٠١٢٣٤٥٦٧٨٩'.indexOf(c));
+export function normalizePhone(value){let phone=latinDigits(value).trim().replace(/[\s()-]/g,'');if(phone.startsWith('00'))phone='+'+phone.slice(2);if(/^09\d{9}$/.test(phone))phone='+98'+phone.slice(1);if(!/^\+[1-9]\d{7,14}$/.test(phone))throw Error('شماره را با کد کشور وارد کنید؛ برای ایران ۰۹۱۲… یا +۹۸۹۱۲…');return phone}
+export function normalizeOtp(value){const code=latinDigits(value).trim();if(!/^\d{6}$/.test(code))throw Error('کد شش‌رقمی پیامک را وارد کنید.');return code}

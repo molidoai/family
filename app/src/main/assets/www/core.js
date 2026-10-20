@@ -1,3 +1,4 @@
+import {validateInbox} from './inbox-schema.js';
 export const KEY='molido-family-fund-v1';
 const pf=new Intl.DateTimeFormat('en-u-ca-persian-nu-latn',{year:'numeric',month:'numeric',day:'numeric',timeZone:'UTC'});
 const fail=t=>{throw Error(t)},money=n=>Number.isSafeInteger(n)&&n>=0&&n<=1e12;
@@ -36,6 +37,7 @@ export function validate(s){
  }
  const funded=new Set();for(const e of active(s).filter(e=>e.type==='loan'&&e.requestId)){const r=(s.requests||[]).find(r=>r.id===e.requestId);if(!r||r.status!=='approved'||funded.has(r.id)||r.memberId!==e.memberId||r.amount!==e.amount||r.months!==e.months||e.date<r.decisionDate)fail('ارتباط وام و درخواست معتبر نیست.');funded.add(r.id)}
  const drawIds=new Set();for(const d of s.draws){if(typeof d.id!=='string'||drawIds.has(d.id)||!members.has(d.winnerId)||!Array.isArray(d.candidates)||!d.candidates.length||new Set(d.candidates).size!==d.candidates.length||d.candidates.some(id=>!members.has(id))||!d.candidates.includes(d.winnerId)||!validDate(d.date))fail('سوابق قرعه‌کشی معتبر نیست.');drawIds.add(d.id)}
+ validateInbox(s,{validDate,validPeriod});
  return s;
 }
 export const addEntry=(s,e)=>validate({...s,entries:[...s.entries,e]});

@@ -11,12 +11,13 @@ export function dailyPlan(state,asOf){
  const funded=new Set(active(state).filter(e=>e.type==='loan'&&e.requestId).map(e=>e.requestId));
  const requests=(state.requests||[]).filter(r=>r.date<=asOf&&!funded.has(r.id)&&!state.members.find(m=>m.id===r.memberId)?.archived);
  const waiting=requests.filter(r=>r.status==='approved'),first=waiting[0]||null,cash=balance(snapshot);
- return {memberCount:state.members.length,period,asOf,missing,missingTotal:missing.reduce((n,d)=>n+d.amount,0),overdue,overdueTotal:overdue.reduce((n,p)=>n+p.due,0),upcoming,expected,collected,shareRemaining:expected-collected,pending:requests.filter(r=>r.status==='pending').length,waiting:waiting.length,nextRequest:first,nextRequestAffordable:!!first&&first.amount<=cash,cash};
+ return {inboxPending:(state.inbox||[]).filter(i=>i.status==='pending').length,memberCount:state.members.length,period,asOf,missing,missingTotal:missing.reduce((n,d)=>n+d.amount,0),overdue,overdueTotal:overdue.reduce((n,p)=>n+p.due,0),upcoming,expected,collected,shareRemaining:expected-collected,pending:requests.filter(r=>r.status==='pending').length,waiting:waiting.length,nextRequest:first,nextRequestAffordable:!!first&&first.amount<=cash,cash};
 }
 
 export function renderAssistant(plan,{fmt,date,esc,action,broken=false}){
  if(broken)return '<section class="panel smartPanel"><h2>ابتدا اطلاعات صندوق را بازیابی کنید</h2><p>برای حفاظت از سوابق، پیشنهاد و ثبت مالی تا بازیابی نسخه سالم متوقف است.</p><button data-page="settings">پشتیبان و بازیابی</button></section>';
  const tasks=[];
+ if(plan.inboxPending)tasks.push({title:'رسید واریز منتظر بررسی است',text:fmt(plan.inboxPending)+' درخواست دریافت‌شده؛ هویت و واریز واقعی را بررسی کنید.',button:'<button data-page="inbox">صندوق پیام مدیر</button>'});
  if(!plan.memberCount)tasks.push({title:'اولین عضو صندوق را اضافه کنید',text:'نام و سهم ماهانه را تعیین کنید تا برنامه کارهای ماه را آماده کند.',button:action('member','＋ عضو جدید','','primary')});
  if(plan.missing.length)tasks.push({title:'سهم ماه جدید آماده ثبت است',text:fmt(plan.missing.length)+' عضو · '+fmt(plan.missingTotal)+' تومان · '+plan.period.replace('-','/'),button:action('smartDues','بررسی و تأیید سهم‌ها','','primary')});
  if(plan.overdue.length)tasks.push({title:'پیگیری اقساط عقب‌افتاده',text:fmt(plan.overdue.length)+' قسط · '+fmt(plan.overdueTotal)+' تومان',button:'<button data-page="overdue">مشاهده و پیگیری</button>'});

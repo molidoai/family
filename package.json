@@ -1,11 +1,11 @@
 {
   "name": "hamsahm",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check app/src/main/assets/www/app.js && node --check app/src/main/assets/www/core.js && node --check app/src/main/assets/www/features.js && node --check app/src/main/assets/www/features-ui.js && node --check app/src/main/assets/www/funds.js && node --check app/src/main/assets/www/backup-crypto.js && node --check app/src/main/assets/www/online.js && node --check app/src/main/assets/www/online-payload.js && node --check app/src/main/assets/www/web-lock-core.js && node --check app/src/main/assets/www/web-lock.js && node --check app/src/main/assets/www/assistant.js",
+    "check": "node --check app/src/main/assets/www/app.js && node --check app/src/main/assets/www/core.js && node --check app/src/main/assets/www/features.js && node --check app/src/main/assets/www/features-ui.js && node --check app/src/main/assets/www/funds.js && node --check app/src/main/assets/www/backup-crypto.js && node --check app/src/main/assets/www/online.js && node --check app/src/main/assets/www/online-payload.js && node --check app/src/main/assets/www/web-lock-core.js && node --check app/src/main/assets/www/web-lock.js && node --check app/src/main/assets/www/assistant.js && node --check app/src/main/assets/www/inbox-schema.js && node --check app/src/main/assets/www/inbox.js && node --check app/src/main/assets/www/inbox-ui.js && node --check app/src/main/assets/www/auth-input.js",
     "bundle:online": "node scripts/bundle-online.mjs",
     "build:pages": "node scripts/build-pages.mjs"
   },
