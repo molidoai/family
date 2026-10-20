@@ -48,3 +48,18 @@ jobs:
       - name: Deploy website
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify published application
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error --max-time 20 "${PAGE_URL}" -o /tmp/hamsahm-home.html &&
+               grep -q 'pages-entry.js' /tmp/hamsahm-home.html &&
+               curl --fail --silent --show-error --max-time 20 "${PAGE_URL}pages-entry.js" -o /dev/null &&
+               curl --fail --silent --show-error --max-time 20 "${PAGE_URL}sw.js" -o /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Published application health check failed'
+          exit 1
