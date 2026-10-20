@@ -17,7 +17,7 @@ test('failed startup offers retry without clearing saved financial data',async()
  const dir=await mkdtemp(join(tmpdir(),'hamsahm-startup-'));
  try{
   await buildPages(dir);const nodes={},events={},content={replaceChildren(){this.children=[]},append(...children){this.children.push(...children)}};
-  const context={location:{hash:'#online'},navigator:{onLine:false},addEventListener:(name,fn)=>events[name]=fn,document:{body:{prepend(node){nodes.notice=node}},createElement:()=>({setAttribute(){},addEventListener(name,fn){this[name]=fn}}),getElementById:()=>content}};
+  const context={location:{hash:'#online'},navigator:{onLine:false},addEventListener:(name,fn)=>events[name]=fn,document:{documentElement:{removeAttribute(){}},body:{prepend(node){nodes.notice=node}},createElement:()=>({setAttribute(){},addEventListener(name,fn){this[name]=fn}}),getElementById:()=>content}};
   vm.runInNewContext(await readFile(join(dir,'pages-entry.js'),'utf8'),context,{importModuleDynamically:()=>Promise.reject(Error('offline'))});
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(nodes.notice.hidden,false);assert.equal(content.children.length,2);assert.equal(content.children[1].textContent,'تلاش دوباره');assert.ok(content.children[0].textContent.includes('حذف نمی‌شود'));

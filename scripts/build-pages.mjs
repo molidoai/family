@@ -10,7 +10,9 @@ export async function buildPages(destination=resolve('build/pages')){
  for(const name of names)await writeFile(join(destination,name),await readFile(join(source,name)));
  const csp="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://repfhpczklxftloyffix.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'";
  let html=await readFile(join(destination,'index.html'),'utf8');
+ html=html.replace('<html lang="fa" dir="rtl">','<html lang="fa" dir="rtl" data-web-locked>');
  html=html.replace('<head>','<head><meta http-equiv="Content-Security-Policy" content="'+csp+'"><meta name="referrer" content="no-referrer">');
+ html=html.replace('</head>','<link rel="stylesheet" href="web-lock.css"></head>');
  html=html.replace('src="app.js"','src="pages-entry.js"');
  html=html.replace('<span>هم‌سهم <small>صندوق خانوادگی</small></span></div>','<span>هم‌سهم <small>صندوق خانوادگی</small></span><a class="webApk" href="https://github.com/molidoai/family/releases/latest/download/Hamsahm.apk" target="_blank" rel="noopener noreferrer">دانلود اندروید</a></div>');
  await writeFile(join(destination,'index.html'),html);
@@ -19,7 +21,8 @@ export async function buildPages(destination=resolve('build/pages')){
 const notice=document.createElement('div');notice.className='webConnection';notice.setAttribute('role','status');document.body.prepend(notice);
 function connection(){notice.hidden=navigator.onLine;notice.textContent='اتصال اینترنت قطع است؛ اطلاعات محلی در دسترس است. حساب آنلاین و پرداخت به اینترنت نیاز دارند.'}
 addEventListener('online',connection);addEventListener('offline',connection);connection();
-import('./app.js').catch(()=>{
+import('./web-lock.js').then(module=>module.installWebLock()).then(()=>import('./app.js')).catch(()=>{
+ document.documentElement.removeAttribute('data-web-locked');
  const content=document.getElementById('content');content.replaceChildren();
  const message=document.createElement('p');message.setAttribute('role','alert');message.textContent='بارگذاری برنامه کامل نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید. اطلاعات ذخیره‌شده حذف نمی‌شود.';
  const retry=document.createElement('button');retry.type='button';retry.textContent='تلاش دوباره';retry.addEventListener('click',()=>location.reload());content.append(message,retry);
